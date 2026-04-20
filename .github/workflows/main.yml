@@ -1,0 +1,28 @@
+name: HK Job Bot Daily Run
+
+on:
+  schedule:
+    # 매일 홍콩 시간 오전 9시 (UTC 01:00) 실행
+    - cron: '0 1 * * *'
+  workflow_dispatch: # 우리가 수동으로 실행해볼 수 있는 버튼
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install libraries
+        run: pip install python-telegram-bot requests beautifulsoup4 apscheduler
+
+      - name: Start Bot
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.CHAT_ID }}
+        run: python job_bot.py
