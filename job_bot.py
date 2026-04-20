@@ -72,18 +72,34 @@ async def today(update, context):
         # 마지막 수단: 구글 검색 결과에서 텍스트라도 긁어오기
         await update.message.reply_text("⚠️ 현재 사이트 보안이 매우 강력합니다. 네트워크 환경(핫스팟 등)을 점검하신 후 다시 시도해 주세요.")
 
-def main():
-    app = Application.builder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("today", today))
+import os
+
+# 코드 상단의 토큰 설정 부분
+BOT_TOKEN = os.getenv('BOT_TOKEN')
+CHAT_ID = os.getenv('CHAT_ID')
+
+# ... 중간 함수들은 그대로 두세요 ...
+
+async def run_once():
+    # 봇 객체 생성
+    bot = telegram.Bot(token=BOT_TOKEN)
+    print("🔍 공고 수집 시작...")
     
-    # 매일 오전 9시 알림 스케줄
-    scheduler = BackgroundScheduler(timezone='Asia/Hong_Kong')
-    scheduler.add_job(lambda: asyncio.run(today()), 'cron', hour=9, minute=0)
-    scheduler.start()
+    # 공고 가져오기 (성공했던 함수 이름 확인)
+    jobs = fetch_hong_kong_finance_jobs() 
     
-    print("🤖 홍콩 통합 봇 가동 중... (Ctrl+C로 종료)")
-    app.run_polling()
+    if jobs:
+        header = f"🚀 <b>{datetime.date.today()} HK Job Report</b>"
+        await bot.send_message(chat_id=CHAT_ID, text=header, parse_mode='HTML')
+        # 5개씩 나누어 전송
+        for i in range(0, len(jobs), 5):
+            await bot.send_message(chat_id=CHAT_ID, text="\n".join(jobs[i:i+5]), parse_mode='HTML', disable_web_page_preview=True)
+        print("✅ 메시지 전송 완료!")
+    else:
+        print("⚠️ 새로운 공고가 없습니다.")
 
 if __name__ == '__main__':
-    main()
+    # 깃허브 액션에서는 polling 대신 한 번만 실행하고 종료합니다.
+    asyncio.run(run_once())
+
 
