@@ -1,0 +1,27 @@
+name: One% Rule Trading Bot
+
+on:
+  schedule:
+    - cron: '0 2 * * *'      # 매일 HK 시간 오전 10시 (UTC 02:00)
+  workflow_dispatch:
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install python-telegram-bot requests
+
+      - name: Run One% Rule Bot (final_bot.py)
+        env:
+          BOT_TOKEN_ONE: ${{ secrets.BOT_TOKEN_ONE }}
+          CHAT_ID_ONE: ${{ secrets.CHAT_ID_ONE }}
+        run: python final_bot.py
