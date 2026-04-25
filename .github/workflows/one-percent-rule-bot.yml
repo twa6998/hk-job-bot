@@ -2,7 +2,7 @@ name: One% Rule Trading Bot
 
 on:
   schedule:
-    - cron: '0 2 * * *'   # 매일 HK 시간 오전 10시
+    - cron: '0 2 * * *'   # 매일 HK 시간 오전 10시 (UTC 02:00)
   workflow_dispatch:
 
 jobs:
