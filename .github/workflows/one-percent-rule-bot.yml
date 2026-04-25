@@ -2,7 +2,7 @@ name: One% Rule Trading Bot
 
 on:
   schedule:
-    - cron: '0 2 * * *'      # 매일 HK 시간 오전 10시 (UTC 02:00)
+    - cron: '0 2 * * *'   # 매일 HK 시간 오전 10시
   workflow_dispatch:
 
 jobs:
@@ -20,8 +20,11 @@ jobs:
       - name: Install dependencies
         run: pip install python-telegram-bot requests
 
-      - name: Run One% Rule Bot (final_bot.py)
+      - name: Run One% Rule Bot
         env:
           BOT_TOKEN_ONE: ${{ secrets.BOT_TOKEN_ONE }}
           CHAT_ID_ONE: ${{ secrets.CHAT_ID_ONE }}
-        run: python final_bot.py
+        run: |
+          echo "🚀 One% Rule Bot 시작"
+          python final_bot.py
+          echo "✅ One% Rule Bot 실행 완료 (exit code: $?)"
