@@ -2,7 +2,7 @@ name: VWAP Signal Bot
 
 on:
   schedule:
-    - cron: '5 2 * * *'      # 매일 HK 시간 오전 10:05 (부하 분산)
+    - cron: '5 2 * * *'   # 매일 HK 시간 오전 10:05
   workflow_dispatch:
 
 jobs:
@@ -24,4 +24,7 @@ jobs:
         env:
           BOT_TOKEN_VWAP: ${{ secrets.BOT_TOKEN_VWAP }}
           CHAT_ID_VWAP: ${{ secrets.CHAT_ID_VWAP }}
-        run: python vwap_signalbot.py
+        run: |
+          echo "🚀 VWAP Signal Bot 시작"
+          python vwap_signalbot.py
+          echo "✅ VWAP Signal Bot 실행 완료 (exit code: $?)"
