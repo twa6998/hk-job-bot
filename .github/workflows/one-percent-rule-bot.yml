@@ -25,6 +25,6 @@ jobs:
           BOT_TOKEN_ONE: ${{ secrets.BOT_TOKEN_ONE }}
           CHAT_ID_ONE: ${{ secrets.CHAT_ID_ONE }}
         run: |
-          echo "🚀 One% Rule Bot 시작"
+          echo "🚀 One% Rule Bot 시작 - $(date)"
           python final_bot.py
           echo "✅ One% Rule Bot 실행 완료 (exit code: $?)"
