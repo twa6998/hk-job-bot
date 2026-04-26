@@ -9,12 +9,15 @@ import time
 from typing import List, Dict
 
 # ========================= 설정 =========================
-BOT_TOKEN = os.getenv('BOT_TOKEN')
-CHAT_ID = os.getenv('CHAT_ID')          # 기존과 동일
+BOT_TOKEN = '8732882284:AAGpAjSCFfDUAks6_UsilBbmSD0qyvmadZE'  # 새로 만든 Lecturer Bot 토큰
+CHAT_ID = os.getenv('CHAT_ID')
 
-# Ted Ahn님 CV 기반 키워드 (Finance / Accounting / Teaching 경험 반영)
-KEYWORDS = "Part-time Lecturer OR Adjunct Lecturer OR Visiting Lecturer OR Part time Lecturer"
-FINANCE_KEYWORDS = ["Finance", "Financial", "Accounting", "Fintech", "Investment", "Corporate Finance", "CFA", "FRM"]
+# Ted Ahn님 CV 기반 정밀 키워드
+LECTURER_KEYWORDS = ['Lecturer', 'Part-time Lecturer', 'Adjunct Lecturer', 'Visiting Lecturer', 
+                     'Instructor', 'Teaching Fellow', 'Part time Lecturer']
+
+FINANCE_KEYWORDS = ['Finance', 'Financial', 'Accounting', 'Fintech', 'Investment', 
+                    'Corporate Finance', 'CFA', 'FRM', 'Risk Management', 'Banking']
 
 seen_jobs = set()
 
@@ -25,9 +28,9 @@ headers = {
 
 def is_relevant(title: str) -> bool:
     title_lower = title.lower()
-    if not any(kw.lower() in title_lower for kw in ["lecturer", "lecturer", "instructor", "professor"]):
-        return False
-    return any(fk.lower() in title_lower for fk in FINANCE_KEYWORDS)
+    has_lecturer = any(kw.lower() in title_lower for kw in LECTURER_KEYWORDS)
+    has_finance = any(kw.lower() in title_lower for kw in FINANCE_KEYWORDS)
+    return has_lecturer and has_finance
 
 def get_job_hash(title: str, link: str) -> str:
     return hashlib.md5(f"{title}{link}".encode()).hexdigest()[:16]
@@ -35,13 +38,11 @@ def get_job_hash(title: str, link: str) -> str:
 # ========================= JobsDB =========================
 def fetch_jobsdb() -> List[Dict]:
     jobs = []
-    urls = [
-        f"https://hk.jobsdb.com/hk/jobs/{term}-jobs-in-hong-kong"
-        for term in ["part-time-lecturer", "part-time-finance-lecturer", "adjunct-lecturer", "finance-lecturer"]
-    ]
-
-    for url in urls:
+    search_terms = ["part-time-lecturer", "finance-lecturer", "accounting-lecturer", "adjunct-lecturer", "part-time-finance"]
+    
+    for term in search_terms:
         try:
+            url = f"https://hk.jobsdb.com/hk/jobs/{term}-jobs-in-hong-kong"
             resp = requests.get(url, headers=headers, timeout=25)
             soup = BeautifulSoup(resp.text, 'html.parser')
 
@@ -50,10 +51,10 @@ def fetch_jobsdb() -> List[Dict]:
                 title = title_tag.get_text(strip=True) if title_tag else ""
                 link_tag = card.find('a', href=True)
                 link = link_tag.get('href', '') if link_tag else ""
-
+                
                 if not title or not link:
                     continue
-
+                    
                 full_link = f"https://hk.jobsdb.com{link}" if link.startswith('/') else link
 
                 if is_relevant(title):
@@ -71,9 +72,9 @@ def fetch_linkedin() -> List[Dict]:
     try:
         url = "https://www.linkedin.com/jobs/search"
         params = {
-            "keywords": "Part-time Lecturer OR Adjunct Lecturer Finance OR Accounting",
+            "keywords": "Part-time Lecturer OR Adjunct Lecturer Finance OR Accounting OR Fintech",
             "location": "Hong Kong",
-            "f_TPR": "r86400"   # 최근 24시간
+            "f_TPR": "r86400"
         }
         resp = requests.get(url, params=params, headers=headers, timeout=25)
         soup = BeautifulSoup(resp.text, 'html.parser')
@@ -83,7 +84,8 @@ def fetch_linkedin() -> List[Dict]:
             title = title_tag.get_text(strip=True) if title_tag else ""
             link_tag = card.find('a', href=True)
             link = link_tag.get('href', '') if link_tag else ""
-            if not title or not link: continue
+            if not title or not link: 
+                continue
             full_link = f"https://www.linkedin.com{link}" if link.startswith('/') else link
 
             if is_relevant(title):
@@ -100,10 +102,8 @@ async def send_report():
     bot = telegram.Bot(token=BOT_TOKEN)
     all_jobs = []
 
-    print("🔍 JobsDB Part-time Lecturer 검색 중...")
+    print("🔍 Finance Part-time Lecturer 검색 중...")
     all_jobs.extend(fetch_jobsdb())
-    
-    print("🔍 LinkedIn Part-time Lecturer 검색 중...")
     all_jobs.extend(fetch_linkedin())
 
     today = datetime.date.today().strftime("%Y-%m-%d")
@@ -118,7 +118,7 @@ async def send_report():
             await bot.send_message(chat_id=CHAT_ID, text=msg, parse_mode='HTML', disable_web_page_preview=True)
             time.sleep(1.2)
 
-        print(f"✅ 총 {len(all_jobs)}개 공고 전송")
+        print(f"✅ 총 {len(all_jobs)}개 공고 전송 완료")
     else:
         print("ℹ️ 오늘은 새로운 Part-time Lecturer 공고가 없습니다.")
 
