@@ -12,7 +12,7 @@ from typing import List, Dict
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 CHAT_ID = os.getenv('CHAT_ID')
 
-SENIOR_KEYWORDS = ['Director', 'Head of', 'VP', 'Vice President', 'Senior Sales', 'Lead', 'Chief', 'Executive', 'Assistant Director']
+SENIOR_KEYWORDS = ['Director', 'Head of', 'VP', 'Vice President', 'Senior', 'Lead', 'Chief', 'Executive', 'Assistant Director']
 FULLTIME_KEYWORDS = ['Full time', 'Full-time', 'Permanent', 'Fulltime']
 
 seen_jobs = set()
@@ -37,15 +37,16 @@ def fetch_efinancialcareers() -> List[Dict]:
     jobs = []
     try:
         url = "https://www.efinancialcareers.hk/jobs"
-        params = {"keywords": "Sales Director OR Head of Sales OR VP Sales OR Senior Sales", "location": "Hong Kong"}
-        resp = requests.get(url, params=params, headers=headers, timeout=25)
+        params = {"keywords": "Sales Director OR \"Head of Sales\" OR VP Sales OR Senior Sales", "location": "Hong Kong"}
+        resp = requests.get(url, params=params, headers=headers, timeout=30)
         soup = BeautifulSoup(resp.text, 'html.parser')
 
-        for card in soup.find_all(['div', 'article'], class_=lambda x: x and any(c in str(x).lower() for c in ['job', 'card'])):
-            title = card.get_text(strip=True)[:150]
+        for card in soup.find_all(['div', 'article', 'li'], class_=lambda x: x and any(c in str(x).lower() for c in ['job', 'card', 'listing'])):
+            title = card.get_text(strip=True)[:200]
             link_tag = card.find('a', href=True)
-            link = link_tag['href'] if link_tag else ""
-            if not title or not link or "sales" not in title.lower(): continue
+            link = link_tag.get('href', '') if link_tag else ""
+            if not title or not link or "sales" not in title.lower(): 
+                continue
             full_link = f"https://www.efinancialcareers.hk{link}" if link.startswith('/') else link
             if is_senior(title) and is_fulltime(title):
                 job_hash = get_job_hash(title, full_link)
@@ -56,42 +57,40 @@ def fetch_efinancialcareers() -> List[Dict]:
         print(f"eFinancial Error: {e}")
     return jobs
 
-# ========================= JobsDB (확장 버전) =========================
+# ========================= JobsDB 강화 버전 =========================
 def fetch_jobsdb() -> List[Dict]:
     jobs = []
-    # 🔍 확장된 검색 URL 리스트
-    urls = [
-        "https://hk.jobsdb.com/hk/jobs/sales-director-jobs-in-hong-kong",
-        "https://hk.jobsdb.com/hk/jobs/head-of-sales-jobs-in-hong-kong",
-        "https://hk.jobsdb.com/hk/jobs/vp-sales-jobs-in-hong-kong",
-        "https://hk.jobsdb.com/hk/jobs/director-of-sales-jobs-in-hong-kong",
-        "https://hk.jobsdb.com/hk/jobs/senior-sales-jobs-in-hong-kong",
-        "https://hk.jobsdb.com/hk/jobs/senior-sales-director-jobs-in-hong-kong",
-        "https://hk.jobsdb.com/hk/jobs/vice-president-sales-jobs-in-hong-kong",
-        "https://hk.jobsdb.com/hk/jobs/sales-lead-jobs-in-hong-kong"
-    ]
-
-    for base_url in urls:
+    search_terms = ["sales-director", "head-of-sales", "vp-sales", "director-sales", "senior-sales", "sales-lead", "sales-manager"]
+    
+    for term in search_terms:
         try:
-            resp = requests.get(base_url, headers=headers, timeout=25)
+            url = f"https://hk.jobsdb.com/hk/jobs/{term}-jobs-in-hong-kong"
+            resp = requests.get(url, headers=headers, timeout=25)
             soup = BeautifulSoup(resp.text, 'html.parser')
 
-            for card in soup.find_all('div', attrs={"data-testid": lambda x: x and 'job-card' in str(x).lower()}):
-                title_tag = card.find(['h3', 'a'])
+            # 더 넓은 범위로 Job Card 찾기
+            cards = soup.find_all(['div', 'article'], attrs={"data-testid": lambda x: x and 'job-card' in str(x).lower()})
+            if not cards:
+                cards = soup.find_all('div', class_=lambda x: x and 'job' in str(x).lower())
+
+            for card in cards:
+                title_tag = card.find(['h3', 'h2', 'a'])
                 title = title_tag.get_text(strip=True) if title_tag else ""
                 link_tag = card.find('a', href=True)
-                link = link_tag['href'] if link_tag else ""
+                link = link_tag.get('href', '') if link_tag else ""
+                
                 if not title or not link or "sales" not in title.lower():
                     continue
+                    
                 full_link = f"https://hk.jobsdb.com{link}" if link.startswith('/') else link
 
-                if is_senior(title) and is_fulltime(str(card)):
+                if is_senior(title) and is_fulltime(str(card.get_text())):
                     job_hash = get_job_hash(title, full_link)
                     if job_hash not in seen_jobs:
                         seen_jobs.add(job_hash)
                         jobs.append({"source": "JobsDB", "title": title, "link": full_link})
         except Exception as e:
-            print(f"JobsDB Error ({base_url}): {e}")
+            print(f"JobsDB Error ({term}): {e}")
     return jobs
 
 # ========================= LinkedIn =========================
@@ -111,8 +110,9 @@ def fetch_linkedin() -> List[Dict]:
             title_tag = card.find('h3')
             title = title_tag.get_text(strip=True) if title_tag else ""
             link_tag = card.find('a', href=True)
-            link = link_tag['href'] if link_tag else ""
-            if not title or not link: continue
+            link = link_tag.get('href', '') if link_tag else ""
+            if not title or not link: 
+                continue
             full_link = f"https://www.linkedin.com{link}" if link.startswith('/') else link
 
             if is_senior(title) and "sales" in title.lower() and is_fulltime(title):
@@ -132,7 +132,7 @@ async def send_report():
     print("🔍 eFinancialCareers 검색 중...")
     all_jobs.extend(fetch_efinancialcareers())
     
-    print("🔍 JobsDB 검색 중... (확장됨)")
+    print("🔍 JobsDB 검색 중... (강화됨)")
     all_jobs.extend(fetch_jobsdb())
     
     print("🔍 LinkedIn 검색 중...")
@@ -142,7 +142,7 @@ async def send_report():
 
     if all_jobs:
         header = f"🚀 <b>{today} Senior Sales Report (Multi-Site)</b>\n"
-        header += "Ted Ahn님, JobsDB 검색 범위를 확대했습니다.\n\n"
+        header += "Ted Ahn님, JobsDB 검색을 대폭 강화했습니다.\n\n"
         await bot.send_message(chat_id=CHAT_ID, text=header, parse_mode='HTML')
 
         for job in all_jobs[:15]:
@@ -150,7 +150,7 @@ async def send_report():
             await bot.send_message(chat_id=CHAT_ID, text=msg, parse_mode='HTML', disable_web_page_preview=True)
             time.sleep(1.2)
 
-        print(f"✅ 총 {len(all_jobs)}개 공고 전송")
+        print(f"✅ 총 {len(all_jobs)}개 공고 전송 완료")
     else:
         print("ℹ️ 오늘은 새로운 공고가 없습니다.")
 
