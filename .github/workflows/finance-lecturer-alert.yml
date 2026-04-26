@@ -2,23 +2,28 @@ name: Finance Part-time Lecturer Alert
 
 on:
   schedule:
-    - cron: '0 3 * * *'      # 매일 한국시간 오후 12시
-  workflow_dispatch:
+    - cron: '0 3 * * *'      # 매일 한국시간 오후 12시 (UTC 03:00)
+  workflow_dispatch:         # 수동 실행 가능
 
 jobs:
   lecturer-alert:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: 📥 Repository 코드 가져오기
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: 🐍 Python 3.12 설치
+        uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
-      - run: pip install requests beautifulsoup4 python-telegram-bot
+      - name: 📦 필요한 패키지 설치
+        run: |
+          pip install requests beautifulsoup4 python-telegram-bot
 
-      - run: python lecturer_bot.py
+      - name: 🚀 Finance Part-time Lecturer Bot 실행
+        run: python lecturer_bot.py
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
