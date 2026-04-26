@@ -9,15 +9,12 @@ import time
 from typing import List, Dict
 
 # ========================= 설정 =========================
-BOT_TOKEN = '8732882284:AAGpAjSCFfDUAks6_UsilBbmSD0qyvmadZE'  # 새로 만든 Lecturer Bot 토큰
+BOT_TOKEN = '8732882284:AAGpAjSCFfDUAks6_UsilBbmSD0qyvmadZE'
 CHAT_ID = os.getenv('CHAT_ID')
 
-# Ted Ahn님 CV 기반 정밀 키워드
-LECTURER_KEYWORDS = ['Lecturer', 'Part-time Lecturer', 'Adjunct Lecturer', 'Visiting Lecturer', 
-                     'Instructor', 'Teaching Fellow', 'Part time Lecturer']
-
-FINANCE_KEYWORDS = ['Finance', 'Financial', 'Accounting', 'Fintech', 'Investment', 
-                    'Corporate Finance', 'CFA', 'FRM', 'Risk Management', 'Banking']
+# 키워드
+LECTURER_KEYWORDS = ['Lecturer', 'Part-time Lecturer', 'Adjunct Lecturer', 'Visiting Lecturer', 'Instructor']
+FINANCE_KEYWORDS = ['Finance', 'Financial', 'Accounting', 'Fintech', 'Investment', 'Corporate Finance']
 
 seen_jobs = set()
 
@@ -38,7 +35,7 @@ def get_job_hash(title: str, link: str) -> str:
 # ========================= JobsDB =========================
 def fetch_jobsdb() -> List[Dict]:
     jobs = []
-    search_terms = ["part-time-lecturer", "finance-lecturer", "accounting-lecturer", "adjunct-lecturer", "part-time-finance"]
+    search_terms = ["part-time-lecturer", "finance-lecturer", "accounting-lecturer", "adjunct-lecturer"]
     
     for term in search_terms:
         try:
@@ -72,7 +69,7 @@ def fetch_linkedin() -> List[Dict]:
     try:
         url = "https://www.linkedin.com/jobs/search"
         params = {
-            "keywords": "Part-time Lecturer OR Adjunct Lecturer Finance OR Accounting OR Fintech",
+            "keywords": "Part-time Lecturer OR Adjunct Lecturer Finance OR Accounting",
             "location": "Hong Kong",
             "f_TPR": "r86400"
         }
@@ -84,8 +81,7 @@ def fetch_linkedin() -> List[Dict]:
             title = title_tag.get_text(strip=True) if title_tag else ""
             link_tag = card.find('a', href=True)
             link = link_tag.get('href', '') if link_tag else ""
-            if not title or not link: 
-                continue
+            if not title or not link: continue
             full_link = f"https://www.linkedin.com{link}" if link.startswith('/') else link
 
             if is_relevant(title):
@@ -102,7 +98,7 @@ async def send_report():
     bot = telegram.Bot(token=BOT_TOKEN)
     all_jobs = []
 
-    print("🔍 Finance Part-time Lecturer 검색 중...")
+    print("🔍 Finance Lecturer 검색 중...")
     all_jobs.extend(fetch_jobsdb())
     all_jobs.extend(fetch_linkedin())
 
@@ -118,9 +114,12 @@ async def send_report():
             await bot.send_message(chat_id=CHAT_ID, text=msg, parse_mode='HTML', disable_web_page_preview=True)
             time.sleep(1.2)
 
-        print(f"✅ 총 {len(all_jobs)}개 공고 전송 완료")
+        print(f"✅ {len(all_jobs)}개 공고 전송")
     else:
-        print("ℹ️ 오늘은 새로운 Part-time Lecturer 공고가 없습니다.")
+        # ← 공고가 없어도 메시지 보내도록 수정
+        no_job_msg = f"ℹ️ {today} Finance Part-time Lecturer 공고\n\n현재는 새로운 공고가 없습니다."
+        await bot.send_message(chat_id=CHAT_ID, text=no_job_msg, parse_mode='HTML')
+        print("ℹ️ 오늘은 새로운 공고가 없어 알림 전송")
 
 if __name__ == '__main__':
     asyncio.run(send_report())
