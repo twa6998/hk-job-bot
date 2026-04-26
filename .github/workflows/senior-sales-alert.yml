@@ -2,7 +2,7 @@ name: Senior Sales Daily Report
 
 on:
   schedule:
-    - cron: '0 2 * * *'      # 매일 한국시간 오전 11시
+    - cron: '0 2 * * *'
   workflow_dispatch:
 
 jobs:
@@ -13,14 +13,16 @@ jobs:
       - name: 📥 Repository 코드 가져오기
         uses: actions/checkout@v4
 
-      - name: 🐍 Python 3.12 설치
+      - name: 🐍 Python 설치
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
-      - name: 📦 필요한 패키지 설치
+      - name: 📦 Selenium + Chrome 설치
         run: |
-          pip install requests beautifulsoup4 python-telegram-bot
+          sudo apt-get update
+          sudo apt-get install -y chromium-browser chromium-chromedriver
+          pip install requests beautifulsoup4 python-telegram-bot selenium webdriver-manager
 
       - name: 🚀 Senior Sales Job Alert 실행
         run: python job_bot.py
