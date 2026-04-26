@@ -2,8 +2,8 @@ name: Senior Sales Daily Report
 
 on:
   schedule:
-    - cron: '0 2 * * *'      # 매일 한국시간 오전 11시 (UTC 02:00)
-  workflow_dispatch:         # 수동 실행 가능
+    - cron: '0 2 * * *'
+  workflow_dispatch:
 
 jobs:
   senior-sales-alert:
@@ -23,7 +23,7 @@ jobs:
           pip install requests beautifulsoup4 python-telegram-bot
 
       - name: 🚀 Senior Sales Job Alert 실행
-        run: python job_alert.py
+        run: python job_bot.py
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
