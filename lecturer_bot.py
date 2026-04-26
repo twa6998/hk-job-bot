@@ -1,39 +1,27 @@
-import requests
-from bs4 import BeautifulSoup
 import telegram
 import asyncio
 import datetime
 import os
-import hashlib
-import time
-from typing import List, Dict
 
 BOT_TOKEN = '8732882284:AAGkDC1vYrp5cNvJuVg8TmgVsmn4Nq0LRRw'
-CHAT_ID = os.getenv('CHAT_ID')
 
-# ... (중간 생략 - 이전 코드와 동일)
-
-async def send_report():
+async def test():
     bot = telegram.Bot(token=BOT_TOKEN)
-    all_jobs = []
-
-    print("🔍 검색 중...")
-    all_jobs.extend(fetch_jobsdb())
-    all_jobs.extend(fetch_linkedin())
-
-    today = datetime.date.today().strftime("%Y-%m-%d")
-
-    if all_jobs:
-        header = f"🎓 <b>{today} Finance Part-time Lecturer Report</b>\n\n"
-        await bot.send_message(chat_id=CHAT_ID, text=header, parse_mode='HTML')
-        # 공고 전송 로직...
-    else:
-        msg = f"ℹ️ {today} Finance Part-time Lecturer Report\n\n" \
-              "현재는 새로운 공고가 없습니다.\n" \
-              "매일 자동으로 검색하여 알려드립니다."
-        
-        await bot.send_message(chat_id=CHAT_ID, text=msg, parse_mode='HTML')
-        print("ℹ️ 공고 없음 메시지 전송")
+    
+    # 직접 ID 하드코딩해서 테스트
+    test_id = 2114495816
+    
+    try:
+        await bot.send_message(
+            chat_id=test_id,
+            text=f"🧪 Lecturer Bot 직접 테스트\n\n"
+                 f"시간: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+                 f"이 메시지가 보이면 CHAT_ID 문제 해결!",
+            parse_mode='HTML'
+        )
+        print("✅ 직접 전송 성공!")
+    except Exception as e:
+        print(f"❌ 실패: {e}")
 
 if __name__ == '__main__':
-    asyncio.run(send_report())
+    asyncio.run(test())
