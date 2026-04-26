@@ -7,13 +7,7 @@ import os
 import hashlib
 import time
 from typing import List, Dict
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
 
-# ========================= 설정 =========================
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 CHAT_ID = os.getenv('CHAT_ID')
 
@@ -21,75 +15,57 @@ SENIOR_KEYWORDS = ['Director', 'Head of', 'VP', 'Vice President', 'Senior', 'Lea
 
 seen_jobs = set()
 
-# ========================= Selenium 설정 =========================
-def get_driver():
-    chrome_options = Options()
-    chrome_options.add_argument("--headless")
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("--window-size=1920,1080")
-    
-    driver = webdriver.Chrome(options=chrome_options)
-    driver.set_page_load_timeout(30)
-    return driver
+headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+                  '(KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
+}
 
-# ========================= 헬퍼 =========================
 def is_senior(title: str) -> bool:
     return any(kw.lower() in title.lower() for kw in SENIOR_KEYWORDS)
 
 def get_job_hash(title: str, link: str) -> str:
     return hashlib.md5(f"{title}{link}".encode()).hexdigest()[:16]
 
-# ========================= JobsDB with Selenium (강력 버전) =========================
-def fetch_jobsdb_selenium() -> List[Dict]:
+# ========================= eFinancialCareers (강화) =========================
+def fetch_efinancialcareers() -> List[Dict]:
     jobs = []
-    driver = None
     try:
-        driver = get_driver()
-        urls = [
-            "https://hk.jobsdb.com/hk/jobs/sales-director-jobs-in-hong-kong",
-            "https://hk.jobsdb.com/hk/jobs/head-of-sales-jobs-in-hong-kong",
-            "https://hk.jobsdb.com/hk/jobs/senior-sales-jobs-in-hong-kong"
-        ]
+        url = "https://www.efinancialcareers.hk/jobs"
+        params = {
+            "keywords": "Sales Director OR \"Head of Sales\" OR \"VP Sales\" OR \"Senior Sales\"",
+            "location": "Hong Kong"
+        }
+        resp = requests.get(url, params=params, headers=headers, timeout=30)
+        soup = BeautifulSoup(resp.text, 'html.parser')
 
-        for url in urls:
-            print(f"🔍 Selenium JobsDB: {url}")
-            driver.get(url)
-            time.sleep(4)  # 페이지 로딩 대기
+        for card in soup.find_all(['div', 'article'], class_=lambda x: x and any(c in str(x).lower() for c in ['job', 'card', 'listing'])):
+            title = card.get_text(strip=True)[:150]
+            link_tag = card.find('a', href=True)
+            link = link_tag.get('href', '') if link_tag else ""
+            if not title or not link or "sales" not in title.lower():
+                continue
+            full_link = f"https://www.efinancialcareers.hk{link}" if link.startswith('/') else link
 
-            # Job Card 찾기
-            cards = driver.find_elements(By.CSS_SELECTOR, 'div[data-testid*="job-card"], article, div[class*="job"]')
-            
-            for card in cards[:15]:
-                try:
-                    title_elem = card.find_element(By.TAG_NAME, "h3") or card.find_element(By.TAG_NAME, "a")
-                    title = title_elem.text.strip()
-                    link_elem = card.find_element(By.TAG_NAME, "a")
-                    link = link_elem.get_attribute("href")
-
-                    if is_senior(title) and "sales" in title.lower():
-                        job_hash = get_job_hash(title, link)
-                        if job_hash not in seen_jobs:
-                            seen_jobs.add(job_hash)
-                            jobs.append({"source": "JobsDB", "title": title, "link": link})
-                            print(f"✅ Selenium JobsDB 발견: {title}")
-                except:
-                    continue
+            if is_senior(title):
+                job_hash = get_job_hash(title, full_link)
+                if job_hash not in seen_jobs:
+                    seen_jobs.add(job_hash)
+                    jobs.append({"source": "eFinancial", "title": title, "link": full_link})
     except Exception as e:
-        print(f"Selenium JobsDB Error: {e}")
-    finally:
-        if driver:
-            driver.quit()
+        print(f"eFinancial Error: {e}")
     return jobs
 
-# ========================= LinkedIn (기존) =========================
+# ========================= LinkedIn =========================
 def fetch_linkedin() -> List[Dict]:
     jobs = []
     try:
         url = "https://www.linkedin.com/jobs/search"
-        params = {"keywords": "Sales Director OR Head of Sales OR VP Sales", "location": "Hong Kong", "f_TPR": "r86400"}
-        resp = requests.get(url, params=params, headers={'User-Agent': 'Mozilla/5.0'}, timeout=20)
+        params = {
+            "keywords": "Sales Director OR \"Head of Sales\" OR \"VP Sales\" OR \"Senior Sales\"",
+            "location": "Hong Kong",
+            "f_TPR": "r86400"
+        }
+        resp = requests.get(url, params=params, headers=headers, timeout=25)
         soup = BeautifulSoup(resp.text, 'html.parser')
 
         for card in soup.find_all('div', class_=lambda x: x and 'job-search-card' in str(x).lower()):
@@ -114,8 +90,8 @@ async def send_report():
     bot = telegram.Bot(token=BOT_TOKEN)
     all_jobs = []
 
-    print("🔍 JobsDB Selenium 검색 중...")
-    all_jobs.extend(fetch_jobsdb_selenium())
+    print("🔍 eFinancialCareers 검색 중...")
+    all_jobs.extend(fetch_efinancialcareers())
     
     print("🔍 LinkedIn 검색 중...")
     all_jobs.extend(fetch_linkedin())
@@ -123,8 +99,8 @@ async def send_report():
     today = datetime.date.today().strftime("%Y-%m-%d")
 
     if all_jobs:
-        header = f"🚀 <b>{today} Senior Sales Report (Selenium)</b>\n"
-        header += "Ted Ahn님, JobsDB에 Selenium 적용했습니다.\n\n"
+        header = f"🚀 <b>{today} Senior Sales Report</b>\n"
+        header += "Ted Ahn님, LinkedIn + eFinancial 중심으로 안정 운영 중입니다.\n\n"
         await bot.send_message(chat_id=CHAT_ID, text=header, parse_mode='HTML')
 
         for job in all_jobs[:12]:
