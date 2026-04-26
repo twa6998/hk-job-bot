@@ -1,171 +1,29 @@
-import requests
-from bs4 import BeautifulSoup
-import telegram
-import asyncio
-import datetime
-import os
-import hashlib
-import json
-import time
-from typing import List, Dict
+name: Senior Sales Daily Report
 
-# ========================= 설정 =========================
-BOT_TOKEN = os.getenv('BOT_TOKEN')
-CHAT_ID = os.getenv('CHAT_ID')
+on:
+  schedule:
+    - cron: '0 2 * * *'      # 매일 한국시간 오전 11시
+  workflow_dispatch:
 
-SENIOR_KEYWORDS = ['Director', 'Head of', 'VP', 'Vice President', 'Senior Sales', 'Lead', 'Chief', 'Executive', 'Assistant Director']
-FULLTIME_KEYWORDS = ['Full time', 'Full-time', 'Permanent', 'Fulltime', '정규직']
+jobs:
+  senior-sales-alert:
+    runs-on: ubuntu-latest
 
-seen_jobs = set()
-SEEN_JOBS_FILE = 'seen_jobs.json'
+    steps:
+      - name: 📥 Repository 코드 가져오기
+        uses: actions/checkout@v4
 
-# ========================= 중복 방지 로드/저장 =========================
-def load_seen_jobs():
-    global seen_jobs
-    if os.path.exists(SEEN_JOBS_FILE):
-        try:
-            with open(SEEN_JOBS_FILE, 'r', encoding='utf-8') as f:
-                seen_jobs = set(json.load(f))
-        except:
-            seen_jobs = set()
+      - name: 🐍 Python 3.12 설치
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
 
-def save_seen_jobs():
-    with open(SEEN_JOBS_FILE, 'w', encoding='utf-8') as f:
-        json.dump(list(seen_jobs), f, ensure_ascii=False)
+      - name: 📦 필요한 패키지 설치
+        run: |
+          pip install requests beautifulsoup4 python-telegram-bot
 
-# ========================= 공통 헬퍼 =========================
-def is_senior(title: str) -> bool:
-    return any(kw.lower() in title.lower() for kw in SENIOR_KEYWORDS)
-
-def is_fulltime(text: str) -> bool:
-    if not text:
-        return True  # 정보 없으면 일단 통과 (LinkedIn은 자주 생략됨)
-    return any(kw.lower() in text.lower() for kw in FULLTIME_KEYWORDS)
-
-def get_job_hash(title: str, link: str) -> str:
-    return hashlib.md5(f"{title}{link}".encode()).hexdigest()[:16]
-
-headers = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
-                  '(KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
-}
-
-# ========================= eFinancialCareers =========================
-def fetch_efinancialcareers() -> List[Dict]:
-    jobs = []
-    try:
-        url = "https://www.efinancialcareers.hk/jobs"
-        params = {"keywords": "Sales Director OR Head of Sales OR VP Sales OR Senior Sales", "location": "Hong Kong"}
-        resp = requests.get(url, params=params, headers=headers, timeout=25)
-        soup = BeautifulSoup(resp.text, 'html.parser')
-
-        for card in soup.find_all(['div', 'article'], class_=lambda x: x and any(c in str(x).lower() for c in ['job', 'card', 'listing'])):
-            title = card.get_text(strip=True)[:150]
-            link_tag = card.find('a', href=True)
-            link = link_tag['href'] if link_tag else ""
-            if not title or not link or "sales" not in title.lower():
-                continue
-            full_link = f"https://www.efinancialcareers.hk{link}" if link.startswith('/') else link
-
-            if is_senior(title) and is_fulltime(title):
-                job_hash = get_job_hash(title, full_link)
-                if job_hash not in seen_jobs:
-                    seen_jobs.add(job_hash)
-                    jobs.append({"source": "eFinancial", "title": title, "link": full_link})
-    except Exception as e:
-        print(f"eFinancial Error: {e}")
-    return jobs
-
-# ========================= JobsDB =========================
-def fetch_jobsdb() -> List[Dict]:
-    jobs = []
-    urls = [
-        "https://hk.jobsdb.com/hk/jobs/sales-director-jobs-in-hong-kong",
-        "https://hk.jobsdb.com/hk/jobs/head-of-sales-jobs-in-hong-kong",
-        "https://hk.jobsdb.com/hk/jobs/senior-sales-jobs-in-hong-kong"
-    ]
-    try:
-        for base_url in urls:
-            resp = requests.get(base_url, headers=headers, timeout=25)
-            soup = BeautifulSoup(resp.text, 'html.parser')
-
-            for card in soup.find_all('div', attrs={"data-testid": lambda x: x and 'job-card' in str(x).lower()}):
-                title_tag = card.find(['h3', 'a'])
-                title = title_tag.get_text(strip=True) if title_tag else ""
-                link_tag = card.find('a', href=True)
-                link = link_tag['href'] if link_tag else ""
-                if not title or not link:
-                    continue
-                full_link = f"https://hk.jobsdb.com{link}" if link.startswith('/') else link
-
-                if is_senior(title) and "sales" in title.lower() and is_fulltime(str(card)):
-                    job_hash = get_job_hash(title, full_link)
-                    if job_hash not in seen_jobs:
-                        seen_jobs.add(job_hash)
-                        jobs.append({"source": "JobsDB", "title": title, "link": full_link})
-    except Exception as e:
-        print(f"JobsDB Error: {e}")
-    return jobs
-
-# ========================= LinkedIn =========================
-def fetch_linkedin() -> List[Dict]:
-    jobs = []
-    try:
-        url = "https://www.linkedin.com/jobs/search"
-        params = {
-            "keywords": "Sales Director OR \"Head of Sales\" OR \"VP Sales\" OR \"Senior Sales\"",
-            "location": "Hong Kong",
-            "f_TPR": "r86400"   # 지난 24시간
-        }
-        resp = requests.get(url, params=params, headers=headers, timeout=20)
-        soup = BeautifulSoup(resp.text, 'html.parser')
-
-        for card in soup.find_all('div', class_=lambda x: x and 'job-search-card' in str(x).lower()):
-            title_tag = card.find('h3')
-            title = title_tag.get_text(strip=True) if title_tag else ""
-            link_tag = card.find('a', href=True)
-            link = link_tag['href'] if link_tag else ""
-            if not title or not link:
-                continue
-            full_link = f"https://www.linkedin.com{link}" if link.startswith('/') else link
-
-            if is_senior(title) and "sales" in title.lower() and is_fulltime(title):
-                job_hash = get_job_hash(title, full_link)
-                if job_hash not in seen_jobs:
-                    seen_jobs.add(job_hash)
-                    jobs.append({"source": "LinkedIn", "title": title, "link": full_link})
-    except Exception as e:
-        print(f"LinkedIn Error: {e}")
-    return jobs
-
-# ========================= Telegram 전송 =========================
-async def send_report():
-    load_seen_jobs()
-    bot = telegram.Bot(token=BOT_TOKEN)
-    all_jobs = []
-
-    print("🔍 검색 시작...")
-    all_jobs.extend(fetch_efinancialcareers())
-    all_jobs.extend(fetch_jobsdb())
-    all_jobs.extend(fetch_linkedin())
-
-    today = datetime.date.today().strftime("%Y-%m-%d")
-
-    if all_jobs:
-        header = f"🚀 <b>{today} Senior Sales Report (Multi-Site)</b>\n"
-        header += "Ted Ahn님, Full-time Senior Sales 공고만 필터링했습니다.\n\n"
-        await bot.send_message(chat_id=CHAT_ID, text=header, parse_mode='HTML')
-
-        for job in all_jobs[:15]:
-            msg = f"📍 <b>{job['source']}</b>\n🎯 {job['title']}\n🔗 <a href='{job['link']}'>지원하기</a>\n\n"
-            await bot.send_message(chat_id=CHAT_ID, text=msg, parse_mode='HTML', disable_web_page_preview=True)
-            time.sleep(1.2)
-
-        print(f"✅ {len(all_jobs)}개 공고 전송")
-    else:
-        print("ℹ️ 오늘은 새로운 Full-time Senior Sales 공고가 없습니다.")
-
-    save_seen_jobs()
-
-if __name__ == '__main__':
-    asyncio.run(send_report())
+      - name: 🚀 Senior Sales Job Alert 실행
+        run: python job_bot.py
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.CHAT_ID }}
